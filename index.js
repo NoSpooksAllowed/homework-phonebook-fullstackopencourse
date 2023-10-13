@@ -7,6 +7,7 @@ const app = express();
 morgan.token("req-body", req => JSON.stringify(req.body));
 
 app.use(cors());
+app.use(express.static("static"));
 app.use(express.json());
 app.use(morgan("combined", { stream: { write: msg => console.log(msg) } }));
 
@@ -81,6 +82,30 @@ app.post("/api/persons", (request, response) => {
   persons = persons.concat(person);
 
   response.json(person);
+});
+
+app.put("/api/persons/:id", (request, response) => {
+  const body = request.body;
+
+  if (body.name === undefined || body.number === undefined) {
+    return response.status(400).json({
+      error: "no name or number field",
+    });
+  }
+
+  const foundPerson = persons.find(person => person.name === body.name);
+
+  if (foundPerson) {
+    foundPerson.number = body.number;
+
+    response.json(foundPerson);
+
+    return;
+  }
+
+  return response.status(404).json({
+    error: "person not found",
+  });
 });
 
 app.delete("/api/persons/:id", (request, response) => {
