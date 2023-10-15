@@ -14,6 +14,16 @@ app.use(express.static("static"));
 app.use(express.json());
 app.use(morgan("combined", { stream: { write: msg => console.log(msg) } }));
 
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message);
+
+  if (error.name === "CastError") {
+    return response.status(400).send({ error: "malformatted id" });
+  }
+
+  next(error);
+};
+
 app.get("/", (request, response) => {
   response.send("Hello world");
 });
@@ -24,20 +34,23 @@ app.get("/api/persons", async (request, response) => {
   response.json(persons);
 });
 
-app.get("/api/persons/:id", async (request, response) => {
+app.get("/api/persons/:id", async (request, response, next) => {
   try {
     const person = await Person.findById(request.params.id);
 
-    response.json(person);
+    if (person) {
+      response.json(person);
+    } else {
+      response.status(404).json({
+        error: "not found",
+      });
+    }
   } catch (err) {
-    console.error(err.message);
-    response.status(404).json({
-      error: "Not found",
-    });
+    next(err);
   }
 });
 
-app.post("/api/persons", async (request, response) => {
+app.post("/api/persons", async (request, response, next) => {
   try {
     const body = request.body;
 
@@ -64,14 +77,11 @@ app.post("/api/persons", async (request, response) => {
 
     response.json(savedPerson);
   } catch (err) {
-    console.error(err.message);
-    return response.status(500).json({
-      error: "Internal server error",
-    });
+    next(err);
   }
 });
 
-app.put("/api/persons/:id", async (request, response) => {
+app.put("/api/persons/:id", async (request, response, next) => {
   try {
     const body = request.body;
 
@@ -81,30 +91,26 @@ app.put("/api/persons/:id", async (request, response) => {
       });
     }
 
-    const foundPerson = await Person.findOne({ name: body.name });
+    const person = {
+      name: body.name,
+      number: body.number,
+    };
 
-    if (foundPerson) {
-      foundPerson.number = body.number;
+    const updatedPerson = await Person.findByIdAndUpdate(request.params.id, person, { new: true });
 
-      await foundPerson.save();
-
-      response.json(foundPerson);
-
-      return;
+    if (!updatedPerson) {
+      return response.status(404).json({
+        error: "not found",
+      });
     }
 
-    return response.status(404).json({
-      error: "person not found",
-    });
+    response.json(updatedPerson);
   } catch (err) {
-    console.error(err.message);
-    return response.status(500).json({
-      error: "Internal server error",
-    });
+    next(err);
   }
 });
 
-app.delete("/api/persons/:id", async (request, response) => {
+app.delete("/api/persons/:id", async (request, response, next) => {
   try {
     const deletedPerson = await Person.findByIdAndDelete(request.params.id);
 
@@ -113,14 +119,11 @@ app.delete("/api/persons/:id", async (request, response) => {
     }
     response.status(204).end();
   } catch (err) {
-    console.error(err.message);
-    return response.status(500).json({
-      error: "Internal server error",
-    });
+    next(err);
   }
 });
 
-app.get("/info", async (request, response) => {
+app.get("/info", async (request, response, next) => {
   try {
     const persons = await Person.find({});
     const phonebookLen = `<p>Phonebook has info for ${persons.length} people</p>`;
@@ -129,12 +132,11 @@ app.get("/info", async (request, response) => {
 
     response.send(phonebookLen.concat(currentDateTime));
   } catch (err) {
-    console.error(err.message);
-    return response.status(500).json({
-      error: "Internal server error",
-    });
+    next(err);
   }
 });
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
