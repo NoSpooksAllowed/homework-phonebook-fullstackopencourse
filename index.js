@@ -19,6 +19,8 @@ const errorHandler = (error, request, response, next) => {
 
   if (error.name === "CastError") {
     return response.status(400).send({ error: "malformatted id" });
+  } else if (error.name === "ValidationError") {
+    return response.status(400).json({ error: error.message });
   }
 
   next(error);
@@ -54,12 +56,6 @@ app.post("/api/persons", async (request, response, next) => {
   try {
     const body = request.body;
 
-    if (body.name === undefined || body.number === undefined) {
-      return response.status(400).json({
-        error: "no name or number field",
-      });
-    }
-
     const foundPerson = await Person.findOne({ name: body.name });
 
     if (foundPerson) {
@@ -85,18 +81,16 @@ app.put("/api/persons/:id", async (request, response, next) => {
   try {
     const body = request.body;
 
-    if (body.name === undefined || body.number === undefined) {
-      return response.status(400).json({
-        error: "no name or number field",
-      });
-    }
-
     const person = {
       name: body.name,
       number: body.number,
     };
 
-    const updatedPerson = await Person.findByIdAndUpdate(request.params.id, person, { new: true });
+    const updatedPerson = await Person.findByIdAndUpdate(request.params.id, person, {
+      new: true,
+      runValidators: true,
+      context: "query",
+    });
 
     if (!updatedPerson) {
       return response.status(404).json({
